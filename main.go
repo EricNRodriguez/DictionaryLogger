@@ -99,6 +99,41 @@ func initDB() {
 
 }
 
+func init() {
+
+	dirPath := fmt.Sprintf("%s/%s", os.Getenv("HOME"), DIR)
+	dbPath := fmt.Sprintf("%s/%s", dirPath, DB)
+
+	// create dir if uninitialised
+	if _, err := os.Stat(dbPath); err != nil {
+		if os.IsNotExist(err) {
+			// create home dir
+			if err := os.MkdirAll(dirPath, PERMISSIONS); err != nil {
+				fmt.Printf("unable to create internal directories | %s\n", err.Error())
+				os.Exit(1)
+			}
+			// sqlite db
+			if _, err := os.Create(dbPath); err != nil {
+				fmt.Printf("unable to create database | %s\n", err)
+				os.Exit(1)
+			} else {
+				defer initDB()
+			}
+
+		} else {
+			fmt.Println("unable to initialise")
+			os.Exit(1)
+		}
+	}
+
+	// used to store new results and request old results
+	var err error
+	if db, err = sql.Open("sqlite3", dbPath); err != nil {
+		fmt.Printf("unable to open database | %s\n", err)
+		os.Exit(1)
+	}
+}
+
 func addResult(word string, res string) (err error) {
 
 	insertResultSQL := fmt.Sprintf(`INSERT INTO definition (word, results) VALUES ("%s", "%s");`, word, res)
@@ -148,41 +183,6 @@ func retrieveAllResults() (rs map[string]string, err error) {
 	}
 
 	return
-}
-
-func init() {
-
-	dirPath := fmt.Sprintf("%s/%s", os.Getenv("HOME"), DIR)
-	dbPath := fmt.Sprintf("%s/%s", dirPath, DB)
-
-	// create dir if uninitialised
-	if _, err := os.Stat(dbPath); err != nil {
-		if os.IsNotExist(err) {
-			// create home dir
-			if err := os.MkdirAll(dirPath, PERMISSIONS); err != nil {
-				fmt.Printf("unable to create internal directories | %s\n", err.Error())
-				os.Exit(1)
-			}
-			// sqlite db
-			if _, err := os.Create(dbPath); err != nil {
-				fmt.Printf("unable to create database | %s\n", err)
-				os.Exit(1)
-			} else {
-				defer initDB()
-			}
-
-		} else {
-			fmt.Println("unable to initialise")
-			os.Exit(1)
-		}
-	}
-
-	// used to store new results and request old results
-	var err error
-	if db, err = sql.Open("sqlite3", dbPath); err != nil {
-		fmt.Printf("unable to open database | %s\n", err)
-		os.Exit(1)
-	}
 }
 
 func help() {
