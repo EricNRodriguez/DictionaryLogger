@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -8,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"bytes"
 )
 
 // config
@@ -45,18 +45,17 @@ type SearchResult struct {
 }
 
 func (sr SearchResult) String() string {
-	
+
 	var buffer bytes.Buffer
-	
 
 	for i := 0; i < len(sr.Meanings); i++ {
 		buffer.WriteString(fmt.Sprintf("%s\n", sr.Meanings[i].PartOfSpeech))
 		for j := 0; j < len(sr.Meanings[i].Definitions); j++ {
-			buffer.WriteString(fmt.Sprintf("\t\tDefinition: \n \t\t\t\t %s\n", 
+			buffer.WriteString(fmt.Sprintf("\t\tDefinition: \n \t\t\t\t %s\n",
 				sr.Meanings[i].Definitions[j].Definition))
-			buffer.WriteString(fmt.Sprintf("\t\tExample: \n \t\t\t\t %s\n\n", 
+			buffer.WriteString(fmt.Sprintf("\t\tExample: \n \t\t\t\t %s\n\n",
 				sr.Meanings[i].Definitions[j].Example))
-		} 
+		}
 	}
 
 	return buffer.String()
@@ -120,7 +119,7 @@ func queryResultsByWord(word string) (sr string, err error) {
 
 	row, err := db.Query(queryByWordSQL)
 	if err != nil {
-		return 
+		return
 	}
 
 	if row.Next() {
@@ -138,18 +137,17 @@ func retrieveAllResults() (rs map[string]string, err error) {
 
 	row, err := db.Query(selectAllQuerySQL)
 	if err != nil {
-		return 
+		return
 	}
-	
 
 	for row.Next() {
 		var word string
-		var results string 
-		row.Scan(&word,&results)
+		var results string
+		row.Scan(&word, &results)
 		rs[word] = results
 	}
 
-	return 
+	return
 }
 
 func init() {
@@ -222,7 +220,7 @@ func list() {
 	}
 
 	for word, result := range history {
-		fmt.Printf("Word: %s\n", word);
+		fmt.Printf("Word: %s\n", word)
 		if !oneline {
 			fmt.Println(result)
 		}
@@ -237,9 +235,9 @@ func search() {
 	}
 
 	word := strings.ToLower(os.Args[2])
-	
+
 	var result string
-	var err error 
+	var err error
 	if result, err = queryResultsByWord(word); err != nil || result == "" {
 
 		// google dictionary api
@@ -263,7 +261,7 @@ func search() {
 
 		// record search
 		addResult(word, result)
-	} 
+	}
 
 	fmt.Println(result)
 }
