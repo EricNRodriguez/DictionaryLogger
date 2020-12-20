@@ -2,10 +2,10 @@ package main
 
 import (
 	"database/sql"
-	// "encoding/json"
+	"encoding/json"
 	"fmt"
 	_ "github.com/mattn/go-sqlite3"
-	// "net/http"
+	"net/http"
 	"os"
 	"strings"
 	"bytes"
@@ -52,8 +52,10 @@ func (sr SearchResult) String() string {
 	for i := 0; i < len(sr.Meanings); i++ {
 		buffer.WriteString(fmt.Sprintf("%s\n", sr.Meanings[i].PartOfSpeech))
 		for j := 0; j < len(sr.Meanings[i].Definitions); j++ {
-			buffer.WriteString(fmt.Sprintf("\tDefinition: \n \t\t\t\t %s\n", sr.Meanings[i].Definitions[j].Definition))
-			buffer.WriteString(fmt.Sprintf("\tExample: \n \t\t\t\t %s\n\n", sr.Meanings[i].Definitions[j].Example))
+			buffer.WriteString(fmt.Sprintf("\t\tDefinition: \n \t\t\t\t %s\n", 
+				sr.Meanings[i].Definitions[j].Definition))
+			buffer.WriteString(fmt.Sprintf("\t\tExample: \n \t\t\t\t %s\n\n", 
+				sr.Meanings[i].Definitions[j].Example))
 		} 
 	}
 
@@ -75,12 +77,12 @@ func (srs SearchResults) String() string {
 
 var db *sql.DB
 
-func initDB() (err error) {
+func initDB() {
 
 	createDefinitionTableSQL := `CREATE TABLE definition (
-		"word" TEXT,
-		"results TEXT
-	);`
+		word TEXT,
+		results TEXT
+	); ALTER TABLE definition ADD CONSTRAINT UQ_Word UNIQUE (word);`
 
 	statement, err := db.Prepare(createDefinitionTableSQL)
 	if err != nil {
@@ -89,13 +91,18 @@ func initDB() (err error) {
 
 	_, err = statement.Exec()
 
+	if err != nil {
+		fmt.Println("unable to initialise DB")
+		os.Exit(1)
+	}
+
 	return
 
 }
 
-func addResult(word string, res SearchResults) (err error) {
+func addResult(word string, res string) (err error) {
 
-	insertResultSQL := fmt.Sprintf(`INSERT INTO definition ("word", "results") VALUES (%s, %s)`, word, res.String())
+	insertResultSQL := fmt.Sprintf(`INSERT INTO definition (word, results) VALUES ("%s", "%s");`, word, res)
 
 	statement, err := db.Prepare(insertResultSQL)
 	if err != nil {
@@ -109,20 +116,40 @@ func addResult(word string, res SearchResults) (err error) {
 
 func queryResultsByWord(word string) (sr string, err error) {
 
-	queryByWordSQL := fmt.Sprintf(`SELECT ("results") FROM definition WHERE "word=%s";`, word)
+	queryByWordSQL := fmt.Sprintf(`SELECT results FROM definition WHERE word="%s";`, word)
 
 	row, err := db.Query(queryByWordSQL)
-	// defer row.Close()
 	if err != nil {
 		return 
 	}
 
-	if row != nil {
+	if row.Next() {
 		row.Scan(&sr)
 	}
 
 	return
 
+}
+
+func retrieveAllResults() (rs map[string]string, err error) {
+	rs = map[string]string{}
+
+	selectAllQuerySQL := `SELECT word, results from definition;`
+
+	row, err := db.Query(selectAllQuerySQL)
+	if err != nil {
+		return 
+	}
+	
+
+	for row.Next() {
+		var word string
+		var results string 
+		row.Scan(&word,&results)
+		rs[word] = results
+	}
+
+	return 
 }
 
 func init() {
@@ -143,14 +170,11 @@ func init() {
 				fmt.Printf("unable to create database | %s\n", err)
 				os.Exit(1)
 			} else {
-				if err := initDB(); err != nil {
-					fmt.Println("unable to initialise database")
-					os.Exit(1)
-				}
+				defer initDB()
 			}
+
 		} else {
 			fmt.Println("unable to initialise")
-			fmt.Println(err)
 			os.Exit(1)
 		}
 	}
@@ -161,9 +185,6 @@ func init() {
 		fmt.Printf("unable to open database | %s\n", err)
 		os.Exit(1)
 	}
-
-
-
 }
 
 func help() {
@@ -188,15 +209,24 @@ func help() {
 func list() {
 
 	oneline := false
-	if len(os.Args) > 3 {
-		for i := 0; i < len(os.Args[2:]); i++ {
-			if os.Args[i+2] == ONELINE {
-				oneline = true
-			}
+	if len(os.Args) > 2 {
+		if os.Args[2] == ONELINE {
+			oneline = true
 		}
 	}
 
-	fmt.Println(oneline)
+	history, err := retrieveAllResults()
+	if err != nil {
+		fmt.Printf("unable to fetch all results | %s\n", err.Error())
+		os.Exit(1)
+	}
+
+	for word, result := range history {
+		fmt.Printf("Word: %s\n", word);
+		if !oneline {
+			fmt.Println(result)
+		}
+	}
 }
 
 func search() {
@@ -210,38 +240,32 @@ func search() {
 	
 	var result string
 	var err error 
-	if result, err = queryResultsByWord(word); err != nil || word == "" {
+	if result, err = queryResultsByWord(word); err != nil || result == "" {
 
-		fmt.Println(err)
-		fmt.Println(result)
-		fmt.Println("searched!!!")
+		// google dictionary api
+		resp, err := http.Get(fmt.Sprintf("https://api.dictionaryapi.dev/api/v2/entries/en/%s", word))
+		if err != nil {
+			fmt.Printf("error occured during search | %s\n", err.Error())
+			os.Exit(1)
+		}
 
+		respData := SearchResults{}
+		if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
+			fmt.Printf("unable to find definition\n")
+			return
+		}
 
-		// // google dictionary api
-		// resp, err := http.Get(fmt.Sprintf("https://api.dictionaryapi.dev/api/v2/entries/en/%s", word))
-		// if err != nil {
-		// 	fmt.Printf("error occured during search | %s\n", err.Error())
-		// 	os.Exit(1)
-		// }
+		if len(respData) == 0 {
+			return
+		}
 
-		// respData := SearchResults{}
-		// if err := json.NewDecoder(resp.Body).Decode(&respData); err != nil {
-		// 	fmt.Printf("unable to find definition\n")
-		// 	return
-		// }
+		result = respData.String()
 
-		// if len(respData) == 0 {
-		// 	return
-		// }
-
-		// result = respData.String()
-
-
+		// record search
+		addResult(word, result)
 	} 
 
 	fmt.Println(result)
-
-
 }
 
 func main() {
@@ -258,7 +282,7 @@ func main() {
 	case HELP:
 		help()
 	case LIST:
-		fmt.Println("list called")
+		list()
 	case SEARCH:
 		search()
 	default:
