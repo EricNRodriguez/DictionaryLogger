@@ -13,7 +13,7 @@ import (
 
 // config
 const (
-	DIR = ".dictionarylogger"
+	DIR = "~/.dictionarylogger"
 	DB  = "dictionarylogger.db"
 )
 
